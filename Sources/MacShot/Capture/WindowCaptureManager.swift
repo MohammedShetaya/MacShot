@@ -37,7 +37,6 @@ final class WindowCaptureManager {
             let ownerPID = info[kCGWindowOwnerPID as String] as? pid_t ?? 0
             let isOnScreen = info[kCGWindowIsOnscreen as String] as? Bool ?? false
 
-            // Skip our own overlay windows
             if ownerName == "MacShot" { return nil }
 
             return WindowInfo(
@@ -77,9 +76,8 @@ final class WindowCaptureManager {
 
     func windowUnderCursor(at screenPoint: NSPoint) -> WindowInfo? {
         let windows = listWindows()
-        // CGWindowListCopyWindowInfo uses top-left origin
-        let screenHeight = NSScreen.main?.frame.height ?? 0
-        let cgPoint = CGPoint(x: screenPoint.x, y: screenHeight - screenPoint.y)
+        let primaryScreenHeight = NSScreen.screens[0].frame.height
+        let cgPoint = CGPoint(x: screenPoint.x, y: primaryScreenHeight - screenPoint.y)
 
         return windows.first { $0.bounds.contains(cgPoint) }
     }
@@ -128,7 +126,6 @@ final class WindowCaptureManager {
     }
 
     private func drawWallpaperBackground(in rect: NSRect, windowBounds: CGRect, padding: CGFloat) {
-        // Capture the desktop wallpaper area behind the window
         let wallpaperRect = CGRect(
             x: windowBounds.origin.x - padding,
             y: windowBounds.origin.y - padding,
@@ -145,10 +142,9 @@ final class WindowCaptureManager {
             let nsWallpaper = NSImage(cgImage: wallpaperImage, size: rect.size)
             nsWallpaper.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1.0)
         } else {
-            // Fallback to a gradient
             let gradient = NSGradient(colors: [
                 NSColor(calibratedRed: 0.15, green: 0.15, blue: 0.25, alpha: 1.0),
-                NSColor(calibratedRed: 0.25, green: 0.20, blue: 0.35, alpha: 1.0)
+                NSColor(calibratedRed: 0.25, green: 0.20, blue: 0.35, alpha: 1.0),
             ])
             gradient?.draw(in: rect, angle: 135)
         }
@@ -182,18 +178,10 @@ final class WindowPickerOverlay: NSWindow {
         self.windowCaptureManager = windowCaptureManager
         self.pickerView = WindowPickerView(windowCaptureManager: windowCaptureManager)
 
-        guard let screen = NSScreen.main else {
-            super.init(
-                contentRect: .zero,
-                styleMask: .borderless,
-                backing: .buffered,
-                defer: false
-            )
-            return
-        }
+        let fullRect = NSScreen.screens.reduce(CGRect.zero) { $0.union($1.frame) }
 
         super.init(
-            contentRect: screen.frame,
+            contentRect: fullRect,
             styleMask: .borderless,
             backing: .buffered,
             defer: false
@@ -222,6 +210,7 @@ final class WindowPickerOverlay: NSWindow {
 
     func beginPicking() {
         makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
         NSCursor.crosshair.set()
     }
 
@@ -258,51 +247,50 @@ private final class WindowPickerView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
 
-        // Slight dimming over the entire screen
         NSColor.black.withAlphaComponent(0.15).setFill()
         bounds.fill()
 
-        // Highlight the window under cursor
-        guard let windowInfo = highlightedWindow, let screen = NSScreen.main else { return }
+        guard let windowInfo = highlightedWindow else { return }
 
-        // Convert from CG (top-left) to NS (bottom-left) coordinates
-        let screenHeight = screen.frame.height
-        let nsRect = NSRect(
-            x: windowInfo.bounds.origin.x,
-            y: screenHeight - windowInfo.bounds.origin.y - windowInfo.bounds.height,
+        let primaryScreenHeight = NSScreen.screens[0].frame.height
+        let windowOrigin = self.window?.frame.origin ?? .zero
+
+        let nsX = windowInfo.bounds.origin.x
+        let nsY = primaryScreenHeight - windowInfo.bounds.origin.y - windowInfo.bounds.height
+
+        let viewRect = NSRect(
+            x: nsX - windowOrigin.x,
+            y: nsY - windowOrigin.y,
             width: windowInfo.bounds.width,
             height: windowInfo.bounds.height
         )
 
-        // Clear the window area for better visibility
         NSColor.clear.setFill()
         NSGraphicsContext.current?.cgContext.setBlendMode(.clear)
-        nsRect.fill()
+        viewRect.fill()
         NSGraphicsContext.current?.cgContext.setBlendMode(.normal)
 
-        // Blue highlight border
         let highlightColor = NSColor.systemBlue
         highlightColor.withAlphaComponent(0.15).setFill()
-        nsRect.fill()
+        viewRect.fill()
 
-        let border = NSBezierPath(rect: nsRect)
+        let border = NSBezierPath(rect: viewRect)
         border.lineWidth = 3.0
         highlightColor.setStroke()
         border.stroke()
 
-        // Window name label
         let labelText = windowInfo.ownerName as NSString
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 13, weight: .semibold),
-            .foregroundColor: NSColor.white
+            .foregroundColor: NSColor.white,
         ]
         let textSize = labelText.size(withAttributes: attributes)
         let padding: CGFloat = 6
         let bgSize = CGSize(width: textSize.width + padding * 2, height: textSize.height + padding * 2)
 
         let labelOrigin = CGPoint(
-            x: nsRect.midX - bgSize.width / 2,
-            y: nsRect.maxY + 6
+            x: viewRect.midX - bgSize.width / 2,
+            y: viewRect.maxY + 6
         )
 
         let bgRect = NSRect(origin: labelOrigin, size: bgSize)
@@ -331,12 +319,14 @@ private final class WindowPickerView: NSView {
     }
 
     override func keyDown(with event: NSEvent) {
-        if event.keyCode == 53 { // Escape
+        if event.keyCode == 53 {
             onCancel?()
         }
     }
 
     override var acceptsFirstResponder: Bool { true }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func resetCursorRects() {
         addCursorRect(bounds, cursor: .crosshair)

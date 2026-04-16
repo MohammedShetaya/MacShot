@@ -9,6 +9,9 @@ let package = Package(
             name: "MacShot",
             path: "Sources/MacShot",
             exclude: ["Info.plist", "MacShot.entitlements"],
+            resources: [
+                .process("Resources"),
+            ],
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("ScreenCaptureKit"),

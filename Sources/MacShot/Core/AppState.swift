@@ -13,6 +13,7 @@ final class AppState: ObservableObject {
     @AppStorage("windowCapturePadding") var windowCapturePadding: Double = 40.0
     @AppStorage("jpegQuality") var jpegQuality: Double = 0.9
     @AppStorage("selfTimerSeconds") var selfTimerSeconds: Int = 5
+    @AppStorage("playSoundOnCapture") var playSoundOnCapture: Bool = true
 
     func addScreenshot(_ item: ScreenshotItem) {
         DispatchQueue.main.async {

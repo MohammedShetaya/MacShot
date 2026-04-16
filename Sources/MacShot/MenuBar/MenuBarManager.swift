@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import SwiftUI
 import UniformTypeIdentifiers
 
 final class MenuBarManager: NSObject {
@@ -7,6 +8,7 @@ final class MenuBarManager: NSObject {
     private var statusItem: NSStatusItem?
     private var shortcutManager: KeyboardShortcutManager?
     private var cancellables = Set<AnyCancellable>()
+    private var settingsWindow: NSWindow?
 
     init(appState: AppState) {
         self.appState = appState
@@ -73,7 +75,6 @@ final class MenuBarManager: NSObject {
     private func buildMenu() -> NSMenu {
         let menu = NSMenu()
 
-        // Capture actions
         menu.addItem(captureMenuItem(title: "Capture Area", shortcut: "4", modifiers: [.command, .shift], action: #selector(captureArea)))
         menu.addItem(captureMenuItem(title: "Capture Fullscreen", shortcut: "3", modifiers: [.command, .shift], action: #selector(captureFullscreen)))
         menu.addItem(captureMenuItem(title: "Capture Window", shortcut: "5", modifiers: [.command, .shift], action: #selector(captureWindow)))
@@ -81,12 +82,10 @@ final class MenuBarManager: NSObject {
 
         menu.addItem(.separator())
 
-        // Self-Timer submenu
         menu.addItem(selfTimerMenuItem())
 
         menu.addItem(.separator())
 
-        // Desktop icons toggle
         let hideIconsItem = NSMenuItem(title: "Hide Desktop Icons", action: #selector(toggleDesktopIcons), keyEquivalent: "")
         hideIconsItem.target = self
         hideIconsItem.state = appState.desktopIconsHidden ? .on : .off
@@ -94,24 +93,20 @@ final class MenuBarManager: NSObject {
 
         menu.addItem(.separator())
 
-        // Open & Pin
         menu.addItem(captureMenuItem(title: "Open...", shortcut: "", modifiers: [], action: #selector(openFile)))
         menu.addItem(captureMenuItem(title: "Pin to Screen...", shortcut: "", modifiers: [], action: #selector(pinLastScreenshot)))
 
         menu.addItem(.separator())
 
-        // Recent screenshots
         addRecentScreenshotsSection(to: menu)
 
         menu.addItem(.separator())
 
-        // Preferences
         let prefsItem = NSMenuItem(title: "Preferences...", action: #selector(openPreferences), keyEquivalent: ",")
         prefsItem.keyEquivalentModifierMask = .command
         prefsItem.target = self
         menu.addItem(prefsItem)
 
-        // Quit
         let quitItem = NSMenuItem(title: "Quit MacShot", action: #selector(quitApp), keyEquivalent: "q")
         quitItem.keyEquivalentModifierMask = .command
         quitItem.target = self
@@ -172,7 +167,6 @@ final class MenuBarManager: NSObject {
             item.target = self
             item.tag = index
 
-            // Thumbnail
             let thumbnail = createThumbnail(from: screenshot.image, maxSize: 16)
             item.image = thumbnail
 
@@ -252,12 +246,33 @@ final class MenuBarManager: NSObject {
     }
 
     @objc private func openPreferences() {
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        if let window = settingsWindow, window.isVisible {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let settingsView = SettingsView().environmentObject(appState)
+        let hostingView = NSHostingView(rootView: settingsView)
+        hostingView.frame = NSRect(x: 0, y: 0, width: 550, height: 420)
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 550, height: 420),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "MacShot Preferences"
+        window.contentView = hostingView
+        window.center()
+        window.isReleasedWhenClosed = false
+        window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+
+        settingsWindow = window
     }
 
     @objc private func quitApp() {
         NSApp.terminate(nil)
     }
-
 }

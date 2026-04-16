@@ -1,21 +1,17 @@
 import AppKit
 
-final class AnnotationEditorManager {
+final class AnnotationEditorManager: NSObject, NSWindowDelegate {
     static let shared = AnnotationEditorManager()
-    private var currentWindow: AnnotationEditorWindow?
+    private var windows: [AnnotationEditorWindow] = []
 
-    private init() {}
+    private override init() {
+        super.init()
+    }
 
     func openEditor(with image: NSImage) {
-        currentWindow?.close()
-
         let window = AnnotationEditorWindow(image: image)
-        currentWindow = window
-
-        window.delegate = WindowCleanupDelegate.shared
-        WindowCleanupDelegate.shared.onClose = { [weak self] in
-            self?.currentWindow = nil
-        }
+        windows.append(window)
+        window.delegate = self
 
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -28,14 +24,30 @@ final class AnnotationEditorManager {
         }
         openEditor(with: image)
     }
-}
 
-private class WindowCleanupDelegate: NSObject, NSWindowDelegate {
-    static let shared = WindowCleanupDelegate()
-    var onClose: (() -> Void)?
+    func hideAllEditors() {
+        for window in windows {
+            window.orderOut(nil)
+        }
+    }
+
+    func showAllEditors() {
+        for window in windows {
+            window.orderFront(nil)
+        }
+    }
+
+    func closeAllEditors() {
+        for window in windows {
+            window.close()
+        }
+        windows.removeAll()
+    }
+
+    // MARK: - NSWindowDelegate
 
     func windowWillClose(_ notification: Notification) {
-        onClose?()
-        onClose = nil
+        guard let window = notification.object as? AnnotationEditorWindow else { return }
+        windows.removeAll { $0 === window }
     }
 }

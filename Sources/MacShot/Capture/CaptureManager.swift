@@ -9,6 +9,7 @@ final class CaptureManager: ObservableObject {
 
     private var areaCaptureWindow: AreaCaptureOverlayWindow?
     private var windowPicker: WindowPickerOverlay?
+    private var fullscreenPicker: FullscreenPickerOverlay?
     private var scrollingController: ScrollingCaptureController?
     private let windowCaptureManager = WindowCaptureManager()
     private let selfTimerManager = SelfTimerManager()
@@ -19,6 +20,7 @@ final class CaptureManager: ObservableObject {
 
     func captureArea() {
         guard ensurePermission() else { return }
+        prepareForCapture()
         appState?.isCapturing = true
 
         let overlay = AreaCaptureOverlayWindow()
@@ -33,6 +35,7 @@ final class CaptureManager: ObservableObject {
         overlay.onCancel = { [weak self] in
             self?.areaCaptureWindow = nil
             self?.appState?.isCapturing = false
+            self?.restoreAfterCapture()
         }
 
         areaCaptureWindow = overlay
@@ -41,22 +44,38 @@ final class CaptureManager: ObservableObject {
 
     func captureFullscreen() {
         guard ensurePermission() else { return }
+        prepareForCapture()
         appState?.isCapturing = true
 
-        // Brief delay so the menu bar dismisses before capture
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+        let picker = FullscreenPickerOverlay()
+
+        picker.onScreenSelected = { [weak self] screen in
             guard let self else { return }
+            self.fullscreenPicker = nil
 
-            if let image = FullscreenCapture.capture() {
-                self.deliverCapture(image: image, type: .fullscreen)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                if let image = FullscreenCapture.capture(screen: screen) {
+                    self.deliverCapture(image: image, type: .fullscreen)
+                } else {
+                    self.restoreAfterCapture()
+                }
+                self.appState?.isCapturing = false
             }
-
-            self.appState?.isCapturing = false
         }
+
+        picker.onCancel = { [weak self] in
+            self?.fullscreenPicker = nil
+            self?.appState?.isCapturing = false
+            self?.restoreAfterCapture()
+        }
+
+        fullscreenPicker = picker
+        picker.beginPicking()
     }
 
     func captureWindow() {
         guard ensurePermission() else { return }
+        prepareForCapture()
         appState?.isCapturing = true
         windowCaptureManager.appState = appState
 
@@ -68,6 +87,8 @@ final class CaptureManager: ObservableObject {
 
             if let image = self.windowCaptureManager.captureWindow(windowInfo) {
                 self.deliverCapture(image: image, type: .window)
+            } else {
+                self.restoreAfterCapture()
             }
 
             self.appState?.isCapturing = false
@@ -76,6 +97,7 @@ final class CaptureManager: ObservableObject {
         picker.onCancel = { [weak self] in
             self?.windowPicker = nil
             self?.appState?.isCapturing = false
+            self?.restoreAfterCapture()
         }
 
         windowPicker = picker
@@ -84,6 +106,7 @@ final class CaptureManager: ObservableObject {
 
     func captureScrolling() {
         guard ensurePermission() else { return }
+        prepareForCapture()
         appState?.isCapturing = true
 
         let controller = ScrollingCaptureController()
@@ -98,6 +121,7 @@ final class CaptureManager: ObservableObject {
         controller.onCancel = { [weak self] in
             self?.scrollingController = nil
             self?.appState?.isCapturing = false
+            self?.restoreAfterCapture()
         }
 
         scrollingController = controller
@@ -106,6 +130,7 @@ final class CaptureManager: ObservableObject {
 
     func captureWithTimer(seconds: Int, mode: CaptureType) {
         guard ensurePermission() else { return }
+        prepareForCapture()
         appState?.isCapturing = true
 
         selfTimerManager.startTimer(seconds: seconds, mode: mode, captureManager: self) { [weak self] in
@@ -116,9 +141,19 @@ final class CaptureManager: ObservableObject {
     func cancelTimer() {
         selfTimerManager.cancel()
         appState?.isCapturing = false
+        restoreAfterCapture()
     }
 
     // MARK: - Private
+
+    private func prepareForCapture() {
+        OverlayManager.shared.dismissOverlay()
+        AnnotationEditorManager.shared.hideAllEditors()
+    }
+
+    private func restoreAfterCapture() {
+        AnnotationEditorManager.shared.showAllEditors()
+    }
 
     private func ensurePermission() -> Bool {
         guard PermissionManager.shared.hasScreenCapturePermission else {
@@ -129,9 +164,39 @@ final class CaptureManager: ObservableObject {
     }
 
     private func deliverCapture(image: NSImage, type: CaptureType) {
+        restoreAfterCapture()
+        playShutterSound()
         onCaptureCompleted?(image, type)
 
         let item = ScreenshotItem(image: image, timestamp: Date(), captureType: type)
         appState?.addScreenshot(item)
+    }
+
+    private static let shutterSound: NSSound? = {
+        let searches: [Bundle] = {
+            var bundles = [Bundle.main]
+            let bundleName = "MacShot_MacShot"
+            if let nested = Bundle.main.url(forResource: bundleName, withExtension: "bundle"),
+               let b = Bundle(url: nested) {
+                bundles.append(b)
+            }
+            let siblingBundle = Bundle.main.bundleURL.appendingPathComponent("\(bundleName).bundle")
+            if let b = Bundle(url: siblingBundle) {
+                bundles.append(b)
+            }
+            return bundles
+        }()
+
+        for bundle in searches {
+            if let url = bundle.url(forResource: "shutter", withExtension: "mp3") {
+                return NSSound(contentsOf: url, byReference: false)
+            }
+        }
+        return nil
+    }()
+
+    private func playShutterSound() {
+        guard appState?.playSoundOnCapture == true else { return }
+        CaptureManager.shutterSound?.play()
     }
 }

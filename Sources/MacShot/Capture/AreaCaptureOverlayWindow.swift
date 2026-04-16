@@ -10,18 +10,10 @@ final class AreaCaptureOverlayWindow: NSWindow {
     init() {
         overlayView = AreaCaptureOverlayView()
 
-        guard let screen = NSScreen.main else {
-            super.init(
-                contentRect: .zero,
-                styleMask: .borderless,
-                backing: .buffered,
-                defer: false
-            )
-            return
-        }
+        let fullRect = NSScreen.screens.reduce(CGRect.zero) { $0.union($1.frame) }
 
         super.init(
-            contentRect: screen.frame,
+            contentRect: fullRect,
             styleMask: .borderless,
             backing: .buffered,
             defer: false
@@ -47,6 +39,7 @@ final class AreaCaptureOverlayWindow: NSWindow {
 
     func beginCapture() {
         makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
         NSCursor.crosshair.set()
     }
 
@@ -56,17 +49,19 @@ final class AreaCaptureOverlayWindow: NSWindow {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
             guard let self else { return }
 
-            guard let screen = NSScreen.main else {
-                self.onCancel?()
-                return
-            }
-
-            let flippedY = screen.frame.height - rect.maxY
-            let captureRect = CGRect(
-                x: rect.origin.x,
-                y: flippedY,
+            let globalRect = NSRect(
+                x: self.frame.origin.x + rect.origin.x,
+                y: self.frame.origin.y + rect.origin.y,
                 width: rect.width,
                 height: rect.height
+            )
+
+            let primaryScreenHeight = NSScreen.screens[0].frame.height
+            let captureRect = CGRect(
+                x: globalRect.origin.x,
+                y: primaryScreenHeight - globalRect.maxY,
+                width: globalRect.width,
+                height: globalRect.height
             )
 
             guard let cgImage = CGWindowListCreateImage(
@@ -130,7 +125,6 @@ private final class AreaCaptureOverlayView: NSView {
         super.draw(dirtyRect)
         guard let context = NSGraphicsContext.current?.cgContext else { return }
 
-        // Full-screen dimming
         dimmingColor.setFill()
         context.fill(bounds)
 
@@ -142,22 +136,17 @@ private final class AreaCaptureOverlayView: NSView {
     }
 
     private func drawSelection(_ selection: NSRect, in context: CGContext) {
-        // Clear the selected area
         context.setBlendMode(.clear)
         context.fill(selection)
         context.setBlendMode(.normal)
 
-        // Selection border (white with dashed line)
         selectionBorderColor.setStroke()
         let borderPath = NSBezierPath(rect: selection)
         borderPath.lineWidth = 1.0
         borderPath.setLineDash([4, 4], count: 2, phase: 0)
         borderPath.stroke()
 
-        // Crosshair guidelines extending from selection edges
         drawSelectionGuidelines(selection, in: context)
-
-        // Dimension label
         drawDimensionLabel(for: selection)
     }
 
@@ -165,7 +154,6 @@ private final class AreaCaptureOverlayView: NSView {
         guidelineColor.setStroke()
         let dashPattern: [CGFloat] = [2, 4]
 
-        // Top edge to screen top
         let topLine = NSBezierPath()
         topLine.move(to: NSPoint(x: selection.midX, y: selection.maxY))
         topLine.line(to: NSPoint(x: selection.midX, y: bounds.maxY))
@@ -173,7 +161,6 @@ private final class AreaCaptureOverlayView: NSView {
         topLine.setLineDash(dashPattern, count: 2, phase: 0)
         topLine.stroke()
 
-        // Bottom edge to screen bottom
         let bottomLine = NSBezierPath()
         bottomLine.move(to: NSPoint(x: selection.midX, y: selection.minY))
         bottomLine.line(to: NSPoint(x: selection.midX, y: bounds.minY))
@@ -181,7 +168,6 @@ private final class AreaCaptureOverlayView: NSView {
         bottomLine.setLineDash(dashPattern, count: 2, phase: 0)
         bottomLine.stroke()
 
-        // Left edge to screen left
         let leftLine = NSBezierPath()
         leftLine.move(to: NSPoint(x: selection.minX, y: selection.midY))
         leftLine.line(to: NSPoint(x: bounds.minX, y: selection.midY))
@@ -189,7 +175,6 @@ private final class AreaCaptureOverlayView: NSView {
         leftLine.setLineDash(dashPattern, count: 2, phase: 0)
         leftLine.stroke()
 
-        // Right edge to screen right
         let rightLine = NSBezierPath()
         rightLine.move(to: NSPoint(x: selection.maxX, y: selection.midY))
         rightLine.line(to: NSPoint(x: bounds.maxX, y: selection.midY))
@@ -201,14 +186,12 @@ private final class AreaCaptureOverlayView: NSView {
     private func drawCrosshairGuidelines(at point: NSPoint, in context: CGContext) {
         guidelineColor.setStroke()
 
-        // Vertical line
         let vertical = NSBezierPath()
         vertical.move(to: NSPoint(x: point.x, y: bounds.minY))
         vertical.line(to: NSPoint(x: point.x, y: bounds.maxY))
         vertical.lineWidth = 0.5
         vertical.stroke()
 
-        // Horizontal line
         let horizontal = NSBezierPath()
         horizontal.move(to: NSPoint(x: bounds.minX, y: point.y))
         horizontal.line(to: NSPoint(x: bounds.maxX, y: point.y))
@@ -223,19 +206,17 @@ private final class AreaCaptureOverlayView: NSView {
 
         let attributes: [NSAttributedString.Key: Any] = [
             .font: dimensionFont,
-            .foregroundColor: NSColor.white
+            .foregroundColor: NSColor.white,
         ]
         let textSize = text.size(withAttributes: attributes)
         let padding: CGFloat = 6
         let bgSize = CGSize(width: textSize.width + padding * 2, height: textSize.height + padding * 2)
 
-        // Position below the selection, centered
         var labelOrigin = CGPoint(
             x: selection.midX - bgSize.width / 2,
             y: selection.minY - bgSize.height - 8
         )
 
-        // Clamp to screen bounds
         if labelOrigin.y < bounds.minY + 4 {
             labelOrigin.y = selection.maxY + 8
         }
@@ -298,12 +279,14 @@ private final class AreaCaptureOverlayView: NSView {
     }
 
     override func keyDown(with event: NSEvent) {
-        if event.keyCode == 53 { // Escape
+        if event.keyCode == 53 {
             onCancel?()
         }
     }
 
     override var acceptsFirstResponder: Bool { true }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func resetCursorRects() {
         addCursorRect(bounds, cursor: .crosshair)

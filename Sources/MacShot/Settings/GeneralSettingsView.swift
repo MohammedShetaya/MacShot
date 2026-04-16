@@ -6,7 +6,8 @@ struct GeneralSettingsView: View {
     @EnvironmentObject var appState: AppState
 
     @AppStorage("launchAtLogin") private var launchAtLogin = false
-    @AppStorage("playSoundOnCapture") private var playSoundOnCapture = true
+
+
     @AppStorage("fileNamingPattern") private var fileNamingPattern = "MacShot {date} at {time}"
 
     var body: some View {
@@ -55,7 +56,7 @@ struct GeneralSettingsView: View {
 
             Section("Capture") {
                 Toggle("Show overlay after capture", isOn: $appState.showOverlayAfterCapture)
-                Toggle("Play sound on capture", isOn: $playSoundOnCapture)
+                Toggle("Play sound on capture", isOn: $appState.playSoundOnCapture)
             }
 
             Section("File Naming") {
