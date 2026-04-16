@@ -176,6 +176,24 @@ final class CaptureManager: ObservableObject {
         if let asset = NSDataAsset(name: "ShutterSound") {
             return NSSound(data: asset.data)
         }
+
+        let bundleName = "MacShot_MacShot"
+        for base in [Bundle.main.bundleURL, Bundle.main.bundleURL.appendingPathComponent("Contents/Resources")] {
+            let bundleURL = base.appendingPathComponent("\(bundleName).bundle")
+            if let bundle = Bundle(url: bundleURL),
+               let url = bundle.url(forResource: "shutter", withExtension: "mp3") {
+                return NSSound(contentsOf: url, byReference: false)
+            }
+        }
+
+        let sourceDir = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Resources/shutter.mp3")
+        if FileManager.default.fileExists(atPath: sourceDir.path) {
+            return NSSound(contentsOf: sourceDir, byReference: true)
+        }
+
         return nil
     }()
 

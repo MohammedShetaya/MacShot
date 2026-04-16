@@ -60,11 +60,11 @@ final class FullscreenPickerOverlay: NSWindow {
 
         isOpaque = false
         backgroundColor = .clear
-        level = .init(Int(CGShieldingWindowLevel()))
+        level = .init(Int(CGShieldingWindowLevel()) - 1)
         ignoresMouseEvents = false
         acceptsMouseMovedEvents = true
         hasShadow = false
-        collectionBehavior = [.canJoinAllSpaces, .stationary]
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         contentView = pickerView
 
         pickerView.onScreenSelected = { [weak self] screen in
