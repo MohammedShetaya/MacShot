@@ -65,7 +65,7 @@ enum AnnotationRenderer {
             drawHighlight(item, in: ctx)
         case .pencil:
             drawPencil(item, in: ctx)
-        case .crop, .hand:
+        case .crop, .hand, .padding:
             break
         }
     }

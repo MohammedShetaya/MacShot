@@ -9,21 +9,30 @@ struct AnnotationToolbar: View {
     @State private var hoveredArrowStyle: ArrowStyle?
     @State private var hoveredWidth: CGFloat?
 
+    // CleanShot X palette
+    private static let toolbarBackground = Color(nsColor: AnnotationEditorWindow.chromeColor)
+    private static let iconIdle          = Color(white: 0.92)
+    private static let iconHover         = Color.white
+    private static let iconSelected      = Color.white
+    private static let hoverFill         = Color.white.opacity(0.10)
+    private static let selectedFill      = Color(red: 0.04, green: 0.52, blue: 1.0) // #0A84FF-ish
+
     private let toolGroups: [[AnnotationTool]] = [
         [.hand, .crop],
         [.rectangle, .roundedRectangle, .filledRectangle, .circle],
         [.line, .arrow],
         [.text, .blur, .counter, .highlight, .pencil],
+        [.padding],
     ]
 
     var body: some View {
         VStack(spacing: 0) {
             ZStack {
-                HStack(spacing: 0) {
+                HStack(spacing: 10) {
                     toolButtons
-                    toolbarDivider
+                    groupSeparator
                     lineWidthPicker
-                    Spacer().frame(width: 6)
+                    Spacer().frame(width: 2)
                     colorPickerButton
                 }
                 .padding(.trailing, 70)
@@ -33,7 +42,7 @@ struct AnnotationToolbar: View {
                     doneButton
                 }
             }
-            .frame(height: 28)
+            .frame(height: 32)
             .padding(.leading, 76)
             .padding(.trailing, 12)
 
@@ -43,23 +52,32 @@ struct AnnotationToolbar: View {
                     .padding(.bottom, 2)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
+
+            if state.currentTool == .padding {
+                PaddingSubBar(state: state)
+                    .padding(.top, 4)
+                    .padding(.bottom, 2)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
         }
-        .padding(.top, 2)
+        .padding(.top, 4)
         .padding(.bottom, 6)
         .frame(maxWidth: .infinity)
-        .background(Color(nsColor: NSColor(white: 0.15, alpha: 1.0)))
-        .animation(.easeInOut(duration: 0.15), value: state.currentTool == .arrow)
+        .background(
+            ZStack {
+                Self.toolbarBackground
+                WindowDragRegion()
+            }
+        )
+        .animation(.easeInOut(duration: 0.15), value: state.currentTool)
     }
 
     // MARK: - Tool Buttons
 
     private var toolButtons: some View {
-        HStack(spacing: 1) {
+        HStack(spacing: 10) {
             ForEach(toolGroups.indices, id: \.self) { groupIdx in
-                if groupIdx > 0 {
-                    toolbarDivider
-                }
-                HStack(spacing: 1) {
+                HStack(spacing: 2) {
                     ForEach(toolGroups[groupIdx]) { tool in
                         toolButton(for: tool)
                     }
@@ -75,15 +93,15 @@ struct AnnotationToolbar: View {
             selectTool(tool)
         } label: {
             Image(systemName: tool.icon)
-                .font(.system(size: 13, weight: .medium))
-                .frame(width: 28, height: 26)
-                .foregroundColor(isSelected ? .white : Color(white: isHovered ? 0.8 : 0.55))
+                .font(.system(size: 14, weight: .semibold))
+                .frame(width: 30, height: 28)
+                .foregroundColor(isSelected ? Self.iconSelected : (isHovered ? Self.iconHover : Self.iconIdle))
                 .background(
-                    RoundedRectangle(cornerRadius: 5)
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
                         .fill(
                             isSelected
-                                ? Color.accentColor
-                                : (isHovered ? Color.white.opacity(0.08) : Color.clear)
+                                ? Self.selectedFill
+                                : (isHovered ? Self.hoverFill : Color.clear)
                         )
                 )
         }
@@ -105,15 +123,15 @@ struct AnnotationToolbar: View {
                     state.arrowStyle = style
                 } label: {
                     Image(systemName: style.icon)
-                        .font(.system(size: 12, weight: .medium))
-                        .frame(width: 24, height: 24)
-                        .foregroundColor(isSelected ? .white : Color(white: isHovered ? 0.8 : 0.55))
+                        .font(.system(size: 12, weight: .semibold))
+                        .frame(width: 26, height: 24)
+                        .foregroundColor(isSelected ? Self.iconSelected : (isHovered ? Self.iconHover : Self.iconIdle))
                         .background(
-                            RoundedRectangle(cornerRadius: 5)
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
                                 .fill(
                                     isSelected
-                                        ? Color.accentColor
-                                        : (isHovered ? Color.white.opacity(0.08) : Color.clear)
+                                        ? Self.selectedFill
+                                        : (isHovered ? Self.hoverFill : Color.clear)
                                 )
                         )
                 }
@@ -129,7 +147,7 @@ struct AnnotationToolbar: View {
         .padding(.horizontal, 5)
         .padding(.vertical, 2)
         .background(
-            RoundedRectangle(cornerRadius: 6)
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .fill(Color.white.opacity(0.06))
         )
     }
@@ -137,7 +155,7 @@ struct AnnotationToolbar: View {
     // MARK: - Line Width & Color
 
     private var lineWidthPicker: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 6) {
             ForEach([2.0, 4.0, 6.0], id: \.self) { width in
                 let isSelected = state.lineWidth == CGFloat(width)
                 let isHovered = hoveredWidth == CGFloat(width) && !isSelected
@@ -145,9 +163,9 @@ struct AnnotationToolbar: View {
                     state.lineWidth = CGFloat(width)
                 } label: {
                     Circle()
-                        .fill(isSelected ? Color.white : Color(white: isHovered ? 0.6 : 0.4))
+                        .fill(isSelected ? Color.white : Color(white: isHovered ? 0.85 : 0.7))
                         .frame(width: CGFloat(width + 3), height: CGFloat(width + 3))
-                        .frame(width: 12, height: 26)
+                        .frame(width: 14, height: 28)
                 }
                 .buttonStyle(.plain)
                 .onHover { hovering in
@@ -165,10 +183,10 @@ struct AnnotationToolbar: View {
         } label: {
             Circle()
                 .fill(Color(nsColor: state.currentColor))
-                .frame(width: 18, height: 18)
+                .frame(width: 20, height: 20)
                 .overlay(
                     Circle()
-                        .stroke(Color.white.opacity(0.3), lineWidth: 1.5)
+                        .stroke(Color.white.opacity(0.35), lineWidth: 1.5)
                 )
         }
         .buttonStyle(.plain)
@@ -180,25 +198,41 @@ struct AnnotationToolbar: View {
     private var doneButton: some View {
         Button(action: onDone) {
             Text("Done")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(.white)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundColor(Color.white.opacity(0.95))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 5)
                 .background(
-                    Capsule()
-                        .fill(Color(red: 0.0, green: 0.48, blue: 1.0))
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                        .environment(\.colorScheme, .dark)
                 )
+                .background(
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(Color.white.opacity(0.06))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .stroke(Color.white.opacity(0.18), lineWidth: 0.5)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .stroke(Color.black.opacity(0.35), lineWidth: 0.5)
+                        .blendMode(.plusDarker)
+                        .padding(0.5)
+                )
+                .shadow(color: Color.black.opacity(0.35), radius: 2, x: 0, y: 1)
         }
         .buttonStyle(.plain)
     }
 
     // MARK: - Helpers
 
-    private var toolbarDivider: some View {
-        Rectangle()
-            .fill(Color.white.opacity(0.12))
-            .frame(width: 1, height: 16)
-            .padding(.horizontal, 4)
+    private var groupSeparator: some View {
+        // Visual breathing room between tool groups and the line-width / color
+        // section, without a hard divider line. CleanShot uses subtle spacing
+        // instead of separator rules.
+        Color.clear.frame(width: 2, height: 16)
     }
 
     private func selectTool(_ tool: AnnotationTool) {
@@ -220,6 +254,12 @@ struct AnnotationToolbar: View {
             if state.cropRect == nil {
                 state.cropRect = CGRect(origin: .zero, size: state.baseImage.size)
             }
+        }
+
+        // Selecting the padding tool turns the frame on (toggles back off
+        // if it was already enabled and the user taps the tool again).
+        if tool == .padding {
+            state.paddingEnabled = true
         }
     }
 
@@ -292,6 +332,256 @@ struct AnnotationBottomBar: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(Color(nsColor: NSColor(white: 0.12, alpha: 1.0)))
+        .background(
+            ZStack {
+                Color(nsColor: AnnotationEditorWindow.chromeColor)
+                WindowDragRegion()
+            }
+        )
+    }
+}
+
+// MARK: - Padding Sub-Bar
+
+struct PaddingSubBar: View {
+    @ObservedObject var state: AnnotationState
+
+    private static let panelFill = Color.white.opacity(0.06)
+    private static let iconIdle = Color(white: 0.92)
+    private static let iconSelected = Color.white
+    private static let selectedFill = Color.white.opacity(0.16)
+
+    var body: some View {
+        HStack(spacing: 12) {
+            enableToggle
+
+            Divider().frame(height: 18).opacity(0.2)
+
+            sizeGroup
+
+            Divider().frame(height: 18).opacity(0.2)
+
+            styleSegment
+
+            if state.paddingStyle == .customGradient {
+                Divider().frame(height: 18).opacity(0.2)
+                gradientColorWells
+            } else if state.paddingStyle == .solid {
+                Divider().frame(height: 18).opacity(0.2)
+                solidColorWell
+            }
+
+            Divider().frame(height: 18).opacity(0.2)
+
+            shadowToggle
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(Self.panelFill)
+        )
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    // MARK: - Enable
+
+    private var enableToggle: some View {
+        Toggle(isOn: $state.paddingEnabled) {
+            Text("Frame")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(Self.iconIdle)
+        }
+        .toggleStyle(.switch)
+        .controlSize(.mini)
+        .tint(Color(red: 0.04, green: 0.52, blue: 1.0))
+    }
+
+    // MARK: - Size
+
+    private var sizeGroup: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "square.resize")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(Self.iconIdle)
+            ForEach([("S", 32.0), ("M", 64.0), ("L", 96.0), ("XL", 140.0)], id: \.0) { label, value in
+                sizeButton(label: label, value: CGFloat(value))
+            }
+        }
+    }
+
+    private func sizeButton(label: String, value: CGFloat) -> some View {
+        let isSelected = abs(state.paddingSize - value) < 0.5
+        return Button {
+            state.paddingSize = value
+            state.paddingEnabled = true
+        } label: {
+            Text(label)
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundColor(isSelected ? Self.iconSelected : Self.iconIdle)
+                .frame(width: 22, height: 20)
+                .background(
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(isSelected ? Self.selectedFill : Color.clear)
+                )
+        }
+        .buttonStyle(.plain)
+        .help("Padding size: \(label)")
+    }
+
+    // MARK: - Style
+
+    private var styleSegment: some View {
+        HStack(spacing: 2) {
+            ForEach(PaddingStyle.allCases) { style in
+                styleButton(style)
+            }
+        }
+    }
+
+    private func styleButton(_ style: PaddingStyle) -> some View {
+        let isSelected = state.paddingStyle == style
+        return Button {
+            state.paddingStyle = style
+            state.paddingEnabled = true
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: style.icon)
+                    .font(.system(size: 10, weight: .semibold))
+                Text(style.label)
+                    .font(.system(size: 10.5, weight: .medium))
+            }
+            .foregroundColor(isSelected ? Self.iconSelected : Self.iconIdle)
+            .padding(.horizontal, 7)
+            .frame(height: 20)
+            .background(
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(isSelected ? Self.selectedFill : Color.clear)
+            )
+        }
+        .buttonStyle(.plain)
+        .help(style.label)
+    }
+
+    // MARK: - Color Wells
+
+    private var gradientColorWells: some View {
+        HStack(spacing: 6) {
+            colorWell(
+                color: Binding(
+                    get: { state.paddingGradientStart },
+                    set: { state.paddingGradientStart = $0 }
+                ),
+                label: "Start"
+            )
+            colorWell(
+                color: Binding(
+                    get: { state.paddingGradientEnd },
+                    set: { state.paddingGradientEnd = $0 }
+                ),
+                label: "End"
+            )
+        }
+    }
+
+    private var solidColorWell: some View {
+        colorWell(
+            color: Binding(
+                get: { state.paddingSolidColor },
+                set: { state.paddingSolidColor = $0 }
+            ),
+            label: "Color"
+        )
+    }
+
+    private func colorWell(color: Binding<NSColor>, label: String) -> some View {
+        PaddingColorWell(color: color)
+            .frame(width: 20, height: 20)
+            .help(label)
+    }
+
+    // MARK: - Shadow
+
+    private var shadowToggle: some View {
+        Button {
+            state.paddingShadowEnabled.toggle()
+        } label: {
+            Image(systemName: state.paddingShadowEnabled ? "shadow" : "circle")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(state.paddingShadowEnabled ? Self.iconSelected : Self.iconIdle)
+                .frame(width: 22, height: 20)
+                .background(
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(state.paddingShadowEnabled ? Self.selectedFill : Color.clear)
+                )
+        }
+        .buttonStyle(.plain)
+        .help("Drop shadow")
+    }
+}
+
+// MARK: - Color Well
+
+/// A compact color swatch that opens the system color panel on click.
+/// We avoid the stock `NSColorWell` here because its default chrome
+/// doesn't fit the dark compact toolbar.
+private struct PaddingColorWell: NSViewRepresentable {
+    @Binding var color: NSColor
+
+    func makeNSView(context: Context) -> PaddingColorWellView {
+        let view = PaddingColorWellView()
+        view.color = color
+        view.onColorChanged = { newColor in
+            self.color = newColor
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: PaddingColorWellView, context: Context) {
+        nsView.color = color
+        nsView.needsDisplay = true
+    }
+}
+
+final class PaddingColorWellView: NSView {
+    var color: NSColor = .white { didSet { needsDisplay = true } }
+    var onColorChanged: ((NSColor) -> Void)?
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        let circle = NSBezierPath(ovalIn: bounds.insetBy(dx: 1, dy: 1))
+        color.setFill()
+        circle.fill()
+
+        NSColor.white.withAlphaComponent(0.4).setStroke()
+        circle.lineWidth = 1
+        circle.stroke()
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        PaddingColorPanelCoordinator.shared.present(for: self)
+    }
+}
+
+private final class PaddingColorPanelCoordinator: NSObject {
+    static let shared = PaddingColorPanelCoordinator()
+    private weak var activeWell: PaddingColorWellView?
+
+    func present(for well: PaddingColorWellView) {
+        activeWell = well
+
+        let panel = NSColorPanel.shared
+        panel.color = well.color
+        panel.isContinuous = true
+        panel.setTarget(self)
+        panel.setAction(#selector(colorChanged(_:)))
+        panel.orderFront(nil)
+    }
+
+    @objc func colorChanged(_ sender: NSColorPanel) {
+        guard let well = activeWell else { return }
+        well.color = sender.color
+        well.onColorChanged?(sender.color)
     }
 }

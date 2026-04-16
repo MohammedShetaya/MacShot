@@ -41,22 +41,70 @@ extension NSScreen {
 
 // MARK: - Fullscreen Picker Overlay
 
-final class FullscreenPickerOverlay: NSWindow {
+/// Coordinator that presents a borderless picker window on every connected
+/// display so the user can hover any screen and click to capture it.
+final class FullscreenPickerOverlay {
     var onScreenSelected: ((NSScreen) -> Void)?
     var onCancel: (() -> Void)?
 
-    private let pickerView: FullscreenPickerView
+    private var pickerWindows: [FullscreenPickerWindow] = []
 
-    init() {
-        pickerView = FullscreenPickerView()
-        let fullRect = NSScreen.screens.reduce(CGRect.zero) { $0.union($1.frame) }
+    func beginPicking() {
+        tearDown()
+
+        for screen in NSScreen.screens {
+            let window = FullscreenPickerWindow(screen: screen)
+            window.onScreenSelected = { [weak self] selected in
+                guard let self else { return }
+                self.finish()
+                self.onScreenSelected?(selected)
+            }
+            window.onCancel = { [weak self] in
+                guard let self else { return }
+                self.finish()
+                self.onCancel?()
+            }
+            pickerWindows.append(window)
+            window.orderFrontRegardless()
+        }
+
+        pickerWindows.first?.makeKey()
+        NSApp.activate(ignoringOtherApps: true)
+        NSCursor.crosshair.set()
+    }
+
+    private func finish() {
+        NSCursor.arrow.set()
+        tearDown()
+    }
+
+    private func tearDown() {
+        for window in pickerWindows {
+            window.orderOut(nil)
+        }
+        pickerWindows.removeAll()
+    }
+}
+
+// MARK: - Per-Screen Picker Window
+
+private final class FullscreenPickerWindow: NSWindow {
+    var onScreenSelected: ((NSScreen) -> Void)?
+    var onCancel: (() -> Void)?
+
+    private let targetScreen: NSScreen
+
+    init(screen: NSScreen) {
+        self.targetScreen = screen
 
         super.init(
-            contentRect: fullRect,
+            contentRect: screen.frame,
             styleMask: .borderless,
             backing: .buffered,
             defer: false
         )
+
+        setFrame(screen.frame, display: false)
 
         isOpaque = false
         backgroundColor = .clear
@@ -65,40 +113,34 @@ final class FullscreenPickerOverlay: NSWindow {
         acceptsMouseMovedEvents = true
         hasShadow = false
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        contentView = pickerView
 
-        pickerView.onScreenSelected = { [weak self] screen in
-            self?.orderOut(nil)
-            NSCursor.arrow.set()
-            self?.onScreenSelected?(screen)
+        let view = FullscreenPickerView(screen: screen)
+        view.onScreenSelected = { [weak self] in
+            guard let self else { return }
+            self.onScreenSelected?(self.targetScreen)
         }
-        pickerView.onCancel = { [weak self] in
-            self?.orderOut(nil)
-            NSCursor.arrow.set()
+        view.onCancel = { [weak self] in
             self?.onCancel?()
         }
-    }
-
-    func beginPicking() {
-        makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-        NSCursor.crosshair.set()
+        contentView = view
     }
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
 }
 
-// MARK: - Fullscreen Picker NSView
+// MARK: - Picker NSView
 
 private final class FullscreenPickerView: NSView {
-    var onScreenSelected: ((NSScreen) -> Void)?
+    var onScreenSelected: (() -> Void)?
     var onCancel: (() -> Void)?
 
-    private var highlightedScreen: NSScreen?
+    private let screen: NSScreen
+    private var isHovered = false
 
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
+    init(screen: NSScreen) {
+        self.screen = screen
+        super.init(frame: NSRect(origin: .zero, size: screen.frame.size))
         setupTrackingArea()
     }
 
@@ -107,7 +149,9 @@ private final class FullscreenPickerView: NSView {
     }
 
     private func setupTrackingArea() {
-        let options: NSTrackingArea.Options = [.mouseMoved, .activeAlways, .inVisibleRect]
+        let options: NSTrackingArea.Options = [
+            .mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect,
+        ]
         let trackingArea = NSTrackingArea(rect: .zero, options: options, owner: self, userInfo: nil)
         addTrackingArea(trackingArea)
     }
@@ -118,27 +162,25 @@ private final class FullscreenPickerView: NSView {
         NSColor.black.withAlphaComponent(0.15).setFill()
         bounds.fill()
 
-        guard let screen = highlightedScreen else { return }
-
-        let viewRect = screenFrameInViewCoords(screen)
+        guard isHovered else { return }
 
         NSGraphicsContext.current?.cgContext.setBlendMode(.clear)
         NSColor.clear.setFill()
-        viewRect.fill()
+        bounds.fill()
         NSGraphicsContext.current?.cgContext.setBlendMode(.normal)
 
         NSColor.systemBlue.withAlphaComponent(0.1).setFill()
-        viewRect.fill()
+        bounds.fill()
 
-        let border = NSBezierPath(rect: viewRect)
+        let border = NSBezierPath(rect: bounds.insetBy(dx: 1.5, dy: 1.5))
         border.lineWidth = 3.0
         NSColor.systemBlue.setStroke()
         border.stroke()
 
-        drawScreenLabel(for: screen, in: viewRect)
+        drawScreenLabel()
     }
 
-    private func drawScreenLabel(for screen: NSScreen, in viewRect: NSRect) {
+    private func drawScreenLabel() {
         let labelText = screen.localizedName as NSString
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 15, weight: .semibold),
@@ -149,8 +191,8 @@ private final class FullscreenPickerView: NSView {
         let bgSize = CGSize(width: textSize.width + padding * 2, height: textSize.height + padding * 2)
 
         let labelOrigin = CGPoint(
-            x: viewRect.midX - bgSize.width / 2,
-            y: viewRect.midY - bgSize.height / 2
+            x: bounds.midX - bgSize.width / 2,
+            y: bounds.midY - bgSize.height / 2
         )
 
         let bgRect = NSRect(origin: labelOrigin, size: bgSize)
@@ -164,28 +206,27 @@ private final class FullscreenPickerView: NSView {
         )
     }
 
-    private func screenFrameInViewCoords(_ screen: NSScreen) -> NSRect {
-        guard let window = self.window else { return .zero }
-        return NSRect(
-            x: screen.frame.origin.x - window.frame.origin.x,
-            y: screen.frame.origin.y - window.frame.origin.y,
-            width: screen.frame.width,
-            height: screen.frame.height
-        )
-    }
-
     // MARK: - Mouse Events
 
-    override func mouseMoved(with event: NSEvent) {
-        let globalPoint = NSEvent.mouseLocation
-        highlightedScreen = NSScreen.screens.first { $0.frame.contains(globalPoint) }
+    override func mouseEntered(with event: NSEvent) {
+        isHovered = true
         needsDisplay = true
     }
 
-    override func mouseDown(with event: NSEvent) {
-        if let screen = highlightedScreen {
-            onScreenSelected?(screen)
+    override func mouseExited(with event: NSEvent) {
+        isHovered = false
+        needsDisplay = true
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        if !isHovered {
+            isHovered = true
+            needsDisplay = true
         }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        onScreenSelected?()
     }
 
     override func keyDown(with event: NSEvent) {

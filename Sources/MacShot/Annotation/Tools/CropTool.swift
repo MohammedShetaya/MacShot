@@ -4,26 +4,18 @@ struct CropOverlayView: View {
     @ObservedObject var state: AnnotationState
     let imageSize: CGSize
     let viewSize: CGSize
+    /// Top-left corner of the screenshot in canvas-view coordinates. When
+    /// padding is disabled this centers the image; when padding is enabled
+    /// it accounts for the padding offset within the stage.
+    let imageOffset: CGPoint
+    let scale: CGFloat
 
     private let handleSize: CGFloat = 10
     @State private var dragEdge: CropEdge?
     @State private var dragStart: CGPoint = .zero
     @State private var initialRect: CGRect = .zero
 
-    private var scale: CGFloat {
-        let sx = viewSize.width / imageSize.width
-        let sy = viewSize.height / imageSize.height
-        return min(sx, sy)
-    }
-
-    private var offset: CGPoint {
-        let scaledW = imageSize.width * scale
-        let scaledH = imageSize.height * scale
-        return CGPoint(
-            x: (viewSize.width - scaledW) / 2,
-            y: (viewSize.height - scaledH) / 2
-        )
-    }
+    private var offset: CGPoint { imageOffset }
 
     private var cropViewRect: CGRect {
         guard let crop = state.cropRect else {

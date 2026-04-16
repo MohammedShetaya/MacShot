@@ -8,31 +8,53 @@ struct AnnotationCanvas: View {
         GeometryReader { geo in
             let viewSize = geo.size
             let imageSize = state.baseImage.size
-            let scale = min(viewSize.width / imageSize.width, viewSize.height / imageSize.height)
-            let scaledSize = CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
+            // The "stage" is what actually gets displayed - either just the
+            // screenshot, or the screenshot framed by the padding/background
+            // decoration when enabled. Annotation coordinates are always in
+            // image (screenshot) space; we add the pad offset when drawing.
+            let pad: CGFloat = state.paddingEnabled ? state.paddingSize : 0
+            let stageSize = CGSize(
+                width: imageSize.width + pad * 2,
+                height: imageSize.height + pad * 2
+            )
+            let scale = min(viewSize.width / stageSize.width, viewSize.height / stageSize.height)
+            let scaledStage = CGSize(width: stageSize.width * scale, height: stageSize.height * scale)
+            let stageOffset = CGPoint(
+                x: (viewSize.width - scaledStage.width) / 2,
+                y: (viewSize.height - scaledStage.height) / 2
+            )
+            let scaledImage = CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
+            // Top-left of the screenshot, in canvas-view coordinates.
             let imageOffset = CGPoint(
-                x: (viewSize.width - scaledSize.width) / 2,
-                y: (viewSize.height - scaledSize.height) / 2
+                x: stageOffset.x + pad * scale,
+                y: stageOffset.y + pad * scale
             )
 
             ZStack {
-                Color(nsColor: NSColor(white: 0.18, alpha: 1.0))
+                Color(nsColor: AnnotationEditorWindow.chromeColor)
 
-                Image(nsImage: state.baseImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
+                PaddedStageView(state: state)
+                    .frame(width: scaledStage.width, height: scaledStage.height)
+                    .position(x: viewSize.width / 2, y: viewSize.height / 2)
 
                 AnnotationDrawingLayer(
                     state: state,
                     scale: scale,
                     imageOffset: imageOffset,
-                    scaledSize: scaledSize
+                    scaledSize: scaledImage
                 )
-                .frame(width: scaledSize.width, height: scaledSize.height)
-                .position(x: viewSize.width / 2, y: viewSize.height / 2)
+                .frame(width: scaledImage.width, height: scaledImage.height)
+                .position(x: imageOffset.x + scaledImage.width / 2,
+                          y: imageOffset.y + scaledImage.height / 2)
 
                 if state.currentTool == .crop {
-                    CropOverlayView(state: state, imageSize: imageSize, viewSize: viewSize)
+                    CropOverlayView(
+                        state: state,
+                        imageSize: imageSize,
+                        viewSize: viewSize,
+                        imageOffset: imageOffset,
+                        scale: scale
+                    )
                 } else {
                     AnnotationInteractionLayer(
                         state: state,
@@ -44,6 +66,76 @@ struct AnnotationCanvas: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Padded Stage (background + framed screenshot)
+
+/// Renders the screenshot inside its optional padding/background frame.
+/// When padding is disabled this is just the raw image; otherwise it
+/// composites the image on top of the configured background.
+private struct PaddedStageView: View {
+    @ObservedObject var state: AnnotationState
+
+    var body: some View {
+        ZStack {
+            if state.paddingEnabled {
+                PaddingBackgroundView(state: state)
+
+                Image(nsImage: state.baseImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: max(0, state.paddingCornerRadius), style: .continuous))
+                    .shadow(
+                        color: state.paddingShadowEnabled ? Color.black.opacity(0.45) : .clear,
+                        radius: state.paddingShadowEnabled ? max(8, state.paddingSize * 0.35) : 0,
+                        x: 0,
+                        y: state.paddingShadowEnabled ? max(3, state.paddingSize * 0.08) : 0
+                    )
+                    .padding(state.paddingSize)
+            } else {
+                Image(nsImage: state.baseImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+            }
+        }
+    }
+}
+
+/// Draws the current padding background (auto gradient, custom gradient
+/// or solid color) filling its containing frame.
+private struct PaddingBackgroundView: View {
+    @ObservedObject var state: AnnotationState
+
+    var body: some View {
+        switch state.paddingStyle {
+        case .autoGradient:
+            let (start, end) = PaddingRenderer.autoGradientColors(from: state.baseImage)
+            linearGradient(start: start, end: end, angle: state.paddingGradientAngle)
+        case .customGradient:
+            linearGradient(
+                start: state.paddingGradientStart,
+                end: state.paddingGradientEnd,
+                angle: state.paddingGradientAngle
+            )
+        case .solid:
+            Color(nsColor: state.paddingSolidColor)
+        }
+    }
+
+    private func linearGradient(start: NSColor, end: NSColor, angle: Double) -> some View {
+        // Convert NSGradient-style angle (degrees, 0 = right) to the
+        // SwiftUI start/end unit points across the view diagonal.
+        let radians = angle * .pi / 180
+        let dx = cos(radians) * 0.5
+        let dy = -sin(radians) * 0.5
+        let startPoint = UnitPoint(x: 0.5 - dx, y: 0.5 - dy)
+        let endPoint = UnitPoint(x: 0.5 + dx, y: 0.5 + dy)
+        return LinearGradient(
+            colors: [Color(nsColor: start), Color(nsColor: end)],
+            startPoint: startPoint,
+            endPoint: endPoint
+        )
     }
 }
 
@@ -162,7 +254,7 @@ struct AnnotationDrawingLayer: View {
             }
             context.stroke(path, with: .color(color), style: StrokeStyle(lineWidth: lw, lineCap: .round, lineJoin: .round))
 
-        case .crop, .hand:
+        case .crop, .hand, .padding:
             break
         }
     }
@@ -492,7 +584,7 @@ struct AnnotationInteractionLayer: NSViewRepresentable {
                 }
                 return false
 
-            case .crop, .hand:
+            case .crop, .hand, .padding:
                 return false
             }
         }

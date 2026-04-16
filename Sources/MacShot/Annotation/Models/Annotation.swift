@@ -3,6 +3,7 @@ import AppKit
 enum AnnotationTool: String, CaseIterable, Identifiable {
     case hand, crop, rectangle, roundedRectangle, filledRectangle, circle
     case line, arrow, text, blur, counter, highlight, pencil
+    case padding
 
     var id: String { rawValue }
 
@@ -21,6 +22,7 @@ enum AnnotationTool: String, CaseIterable, Identifiable {
         case .counter:           return "1.circle"
         case .highlight:         return "highlighter"
         case .pencil:            return "pencil.tip"
+        case .padding:           return "square.on.square.dashed"
         }
     }
 
@@ -39,6 +41,31 @@ enum AnnotationTool: String, CaseIterable, Identifiable {
         case .counter:           return "Counter"
         case .highlight:         return "Highlight"
         case .pencil:            return "Draw"
+        case .padding:           return "Background"
+        }
+    }
+}
+
+enum PaddingStyle: String, CaseIterable, Identifiable {
+    case autoGradient
+    case customGradient
+    case solid
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .autoGradient:   return "Auto"
+        case .customGradient: return "Gradient"
+        case .solid:          return "Solid"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .autoGradient:   return "wand.and.stars"
+        case .customGradient: return "circle.lefthalf.filled"
+        case .solid:          return "circle.fill"
         }
     }
 }

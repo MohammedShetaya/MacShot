@@ -8,8 +8,8 @@ final class AnnotationEditorManager: NSObject, NSWindowDelegate {
         super.init()
     }
 
-    func openEditor(with image: NSImage) {
-        let window = AnnotationEditorWindow(image: image)
+    func openEditor(with image: NSImage, captureType: CaptureType? = nil) {
+        let window = AnnotationEditorWindow(image: image, captureType: captureType)
         windows.append(window)
         window.delegate = self
 
@@ -22,7 +22,7 @@ final class AnnotationEditorManager: NSObject, NSWindowDelegate {
             NSLog("AnnotationEditorManager: failed to load image at \(url.path)")
             return
         }
-        openEditor(with: image)
+        openEditor(with: image, captureType: nil)
     }
 
     func hideAllEditors() {

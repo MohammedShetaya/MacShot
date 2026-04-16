@@ -187,7 +187,7 @@ struct OverlayView: View {
     }
 
     private func openAnnotationEditor() {
-        AnnotationEditorManager.shared.openEditor(with: image)
+        AnnotationEditorManager.shared.openEditor(with: image, captureType: captureType)
         onDismiss()
     }
 

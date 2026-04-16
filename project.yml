@@ -17,8 +17,15 @@ targets:
     platform: macOS
     sources:
       - path: Sources/MacShot
-    resources:
-      - path: Resources
+    # Optional local override. Create `Signing.xcconfig` (git-ignored) with
+    # `DEVELOPMENT_TEAM = XXXXXXXXXX` (and optionally
+    # `CODE_SIGN_IDENTITY = Apple Development`) to sign with a stable identity
+    # so TCC permissions (screen recording, accessibility) persist across
+    # rebuilds. Without it the build falls back to ad-hoc signing, which gets
+    # a new CDHash every build and makes macOS forget granted permissions.
+    configFiles:
+      Debug: Signing.xcconfig
+      Release: Signing.xcconfig
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.macshot.app

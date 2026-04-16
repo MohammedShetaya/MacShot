@@ -8,7 +8,7 @@ A native macOS screenshot and annotation tool inspired by [CleanShot X](https://
 
 ## Features
 
-- **Screen Capture** — fullscreen, area selection, and window capture modes
+- **Screen Capture** — fullscreen, area selection, and window capture modes (window captures return only the window's own pixels, no wallpaper bleed)
 - **Annotation Editor** — built-in editor with a dark toolbar matching the CleanShot X aesthetic
   - Shapes: rectangle, rounded rectangle, filled rectangle, circle
   - Drawing: line, arrow (with multiple styles), freehand pencil
@@ -16,8 +16,9 @@ A native macOS screenshot and annotation tool inspired by [CleanShot X](https://
   - Highlighter brush for marking up text
   - Pixelate/blur tool for redacting sensitive content
   - Numbered counter stamps
-  - Crop tool with draggable handles
+  - Crop tool with draggable handles (with proper undo support)
   - Configurable line width and color
+- **Frame / Background** — wrap the screenshot in a decorative frame with an auto-generated gradient sampled from the image pixels, a custom gradient, or a solid color — plus rounded corners and drop shadow. Enabled by default for window captures; available as an optional tool for every other capture mode
 - **Pin to Desktop** — pin screenshots as floating windows
 - **Drag to Share** — drag the screenshot directly from the editor to any app
 - **Save & Copy** — save to a configurable directory or copy to clipboard
@@ -58,7 +59,7 @@ MacShot/
 │   │   ├── AnnotationCanvas.swift
 │   │   ├── AnnotationEditorManager.swift
 │   │   ├── Models/               # Data models & state
-│   │   └── Tools/                # Renderer & crop tool
+│   │   └── Tools/                # Renderer, crop tool, padding/frame renderer
 │   ├── Capture/                  # Screenshot capture logic
 │   ├── Core/                     # App state, permissions, shortcuts
 │   ├── MenuBar/                  # Menu bar integration

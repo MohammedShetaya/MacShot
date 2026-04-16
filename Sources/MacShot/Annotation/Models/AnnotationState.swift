@@ -19,8 +19,27 @@ final class AnnotationState: ObservableObject {
     @Published var isCropping: Bool = false
     @Published var cropModified: Bool = false
 
-    private var undoStack: [[AnnotationItem]] = []
-    private var redoStack: [[AnnotationItem]] = []
+    // MARK: - Padding / Background Decoration
+    // These don't become annotation items; they are applied as a render-time
+    // frame around the screenshot (in the canvas and in the final export).
+    @Published var paddingEnabled: Bool = false
+    @Published var paddingSize: CGFloat = 64
+    @Published var paddingStyle: PaddingStyle = .autoGradient
+    @Published var paddingGradientStart: NSColor = NSColor(calibratedRed: 0.18, green: 0.20, blue: 0.32, alpha: 1.0)
+    @Published var paddingGradientEnd: NSColor = NSColor(calibratedRed: 0.42, green: 0.18, blue: 0.46, alpha: 1.0)
+    @Published var paddingGradientAngle: Double = 135
+    @Published var paddingSolidColor: NSColor = NSColor(calibratedWhite: 0.12, alpha: 1.0)
+    @Published var paddingCornerRadius: CGFloat = 12
+    @Published var paddingShadowEnabled: Bool = true
+
+    private struct Snapshot {
+        let baseImage: NSImage
+        let annotations: [AnnotationItem]
+        let nextCounterNumber: Int
+    }
+
+    private var undoStack: [Snapshot] = []
+    private var redoStack: [Snapshot] = []
 
     init(image: NSImage) {
         self.baseImage = image
@@ -28,8 +47,22 @@ final class AnnotationState: ObservableObject {
 
     // MARK: - Undo / Redo
 
+    private func currentSnapshot() -> Snapshot {
+        Snapshot(
+            baseImage: baseImage,
+            annotations: annotations,
+            nextCounterNumber: nextCounterNumber
+        )
+    }
+
+    private func restore(_ snapshot: Snapshot) {
+        baseImage = snapshot.baseImage
+        annotations = snapshot.annotations
+        nextCounterNumber = snapshot.nextCounterNumber
+    }
+
     func saveUndoState() {
-        undoStack.append(annotations)
+        undoStack.append(currentSnapshot())
         redoStack.removeAll()
     }
 
@@ -38,14 +71,14 @@ final class AnnotationState: ObservableObject {
 
     func undo() {
         guard let previous = undoStack.popLast() else { return }
-        redoStack.append(annotations)
-        annotations = previous
+        redoStack.append(currentSnapshot())
+        restore(previous)
     }
 
     func redo() {
         guard let next = redoStack.popLast() else { return }
-        undoStack.append(annotations)
-        annotations = next
+        undoStack.append(currentSnapshot())
+        restore(next)
     }
 
     // MARK: - Annotation Management
@@ -104,18 +137,22 @@ final class AnnotationState: ObservableObject {
               let cropped = cgImage.cropping(to: flippedRect) else { return }
 
         let newImage = NSImage(cgImage: cropped, size: NSSize(width: clampedRect.width, height: clampedRect.height))
+
+        // Snapshot pre-crop state so Cmd-Z restores the original image + annotations.
+        saveUndoState()
+
         baseImage = newImage
         cropRect = nil
         isCropping = false
         cropModified = false
         annotations.removeAll()
-        undoStack.removeAll()
-        redoStack.removeAll()
     }
 
     // MARK: - Final Render
 
     func renderFinalImage() -> NSImage {
-        AnnotationRenderer.renderFinal(annotations: annotations, onto: baseImage)
+        let annotated = AnnotationRenderer.renderFinal(annotations: annotations, onto: baseImage)
+        guard paddingEnabled, paddingSize > 0 else { return annotated }
+        return PaddingRenderer.render(annotated, config: PaddingRenderer.config(from: self))
     }
 }
