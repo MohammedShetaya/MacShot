@@ -173,24 +173,8 @@ final class CaptureManager: ObservableObject {
     }
 
     private static let shutterSound: NSSound? = {
-        let searches: [Bundle] = {
-            var bundles = [Bundle.main]
-            let bundleName = "MacShot_MacShot"
-            if let nested = Bundle.main.url(forResource: bundleName, withExtension: "bundle"),
-               let b = Bundle(url: nested) {
-                bundles.append(b)
-            }
-            let siblingBundle = Bundle.main.bundleURL.appendingPathComponent("\(bundleName).bundle")
-            if let b = Bundle(url: siblingBundle) {
-                bundles.append(b)
-            }
-            return bundles
-        }()
-
-        for bundle in searches {
-            if let url = bundle.url(forResource: "shutter", withExtension: "mp3") {
-                return NSSound(contentsOf: url, byReference: false)
-            }
+        if let asset = NSDataAsset(name: "ShutterSound") {
+            return NSSound(data: asset.data)
         }
         return nil
     }()
